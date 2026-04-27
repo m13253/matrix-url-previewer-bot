@@ -243,8 +243,8 @@ async fn on_deletion(
         return Ok(());
     }
 
-    let room_version = room.clone_info().room_version_or_default();
-    let original_event_id = event.redacts(&room_version);
+    let room_version_rules = room.clone_info().room_version_rules_or_default();
+    let original_event_id = event.redacts(&room_version_rules.redaction);
     ctx.0.on_deletion(room, &original_event_id).await?;
     Ok(())
 }
