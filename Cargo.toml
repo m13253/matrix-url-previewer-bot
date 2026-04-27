@@ -4,32 +4,32 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = { version = "4.5.44", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
 color-eyre = "0.6.5"
 deadpool-sqlite = { version = "*", features = ["tracing"] }
 encoding_rs = "0.8.35"
 eyre = "0.6.12"
-indexmap = "2.10.0"
-matrix-sdk = { version = "0.13.0", features = ["eyre", "socks"] }
-matrixbot-ezlogin = "0.3.7"
+indexmap = "2.14.0"
+matrix-sdk = { version = "0.16.0", features = ["eyre", "socks"] }
+matrixbot-ezlogin = "0.3.8"
 mime = "0.3.17"
-moka = { version = "0.12.10", features = ["future"] }
+moka = { version = "0.12.15", features = ["future"] }
 nom = "8.0.0"
-regex = "1.11.1"
-reqwest = { version = "0.12.22", default-features = false, features = ["brotli", "charset", "deflate", "gzip", "http2", "socks", "stream", "system-proxy"] }
-scraper = "0.23.1"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.142"
-serde_with = "3.14.0"
-tokio = { version = "1.47.1", features = ["full"] }
-toml = "0.9.5"
-tracing = "0.1.41"
+regex = "1.12.3"
+reqwest = { version = "0.13.2", default-features = false, features = ["brotli", "charset", "deflate", "gzip", "http2", "socks", "stream", "system-proxy"] }
+scraper = "0.26.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+serde_with = "3.18.0"
+tokio = { version = "1.52.1", features = ["full"] }
+toml = "1.1.2"
+tracing = "0.1.44"
 tracing-error = "0.2.1"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-url = "2.5.4"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = "2.5.8"
 
 [features]
 default = ["native-tls"]
 bundled-sqlite = ["matrix-sdk/bundled-sqlite", "matrixbot-ezlogin/bundled-sqlite"]
 native-tls = ["matrix-sdk/native-tls", "matrixbot-ezlogin/native-tls", "reqwest/native-tls"]
-rustls-tls = ["matrix-sdk/rustls-tls", "matrixbot-ezlogin/rustls-tls", "reqwest/rustls-tls"]
+rustls-tls = ["matrix-sdk/rustls-tls", "matrixbot-ezlogin/rustls-tls", "reqwest/rustls"]
