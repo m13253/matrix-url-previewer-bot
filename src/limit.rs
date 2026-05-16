@@ -3,7 +3,7 @@ pub fn length_in_bytes(mut s: String, max_bytes: usize) -> String {
     if s.len() <= max_bytes {
         return s;
     }
-    for i in (0..max_bytes.saturating_sub(3)).rev() {
+    for i in (0..=max_bytes.saturating_sub(3)).rev() {
         if s.is_char_boundary(i) {
             s.truncate(i);
             if !s.ends_with("…") {
