@@ -155,7 +155,7 @@ PRAGMA optimize;
             )
             .add_mentions(Mentions::new())
             .with_relation(relates_to);
-            let response_id = room.send(response).await?.event_id;
+            let response_id = room.send(response).await?.response.event_id;
 
             let room_id_str = room.room_id().to_string();
             let original_event_id_str = original_event_id.to_string();
