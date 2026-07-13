@@ -6,6 +6,7 @@ use nom::combinator::{iterator, opt, recognize, value};
 use nom::multi::many0_count;
 use nom::{IResult, Parser};
 use scraper::{Html, Node};
+use stacksafe::stacksafe;
 use tracing::instrument;
 use url::{Host, Url};
 
@@ -84,6 +85,7 @@ fn parse_url_from_text(input: &str) -> IResult<&str, &str> {
     .parse(input)
 }
 
+#[stacksafe]
 fn parse_delimited(input: &str) -> IResult<&str, ()> {
     alt((
         value((), (tag("("), many0_count(parse_delimited), opt(tag(")")))),
