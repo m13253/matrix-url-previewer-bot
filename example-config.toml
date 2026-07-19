@@ -17,8 +17,19 @@ crawler_timeout = 30
 # The maximum number of bytes to read for each URL preview request.
 crawler_max_size = 10485760
 
+# The maximum memory budget, in bytes, allowed for image decoding.
+# Note that image transformation and scaling may need extra memory.
+crawler_max_image_buffer_size = 536870912
+
 # The User-Agent string for outgoing URL preview requests.
 crawler_user_agent = "Mozilla/5.0 (compatible; Matrix-URL-Previewer-Bot; +https://github.com/m13253/matrix-url-previewer-bot; like Discordbot, TelegramBot, Twitterbot)"
+
+# Scale down preview images to be within these numbers of pixels.
+preview_image_max_width = 480
+preview_image_max_height = 200
+
+# WebP quality parameter. Minimum quality is 0.0; maximum quality is 100.0.
+preview_image_webp_quality = 75.0
 
 # URL rewrite rules.
 # Please use https://regex101.com to validate your regex. (Set its validator to Rust mode!)

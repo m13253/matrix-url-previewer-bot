@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::io::Cursor;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -6,11 +7,20 @@ use deadpool_sqlite::rusqlite::OptionalExtension;
 use deadpool_sqlite::{Pool, Runtime};
 use encoding_rs::Encoding;
 use eyre::{Report, Result};
+use image::ImageDecoder;
+use image::imageops::FilterType;
+use image::metadata::Cicp;
+use image::{ColorType, ImageReader};
+use image::{DynamicImage, Limits};
 use indexmap::IndexSet;
 use matrix_sdk::Room;
 use matrix_sdk::ruma::events::Mentions;
 use matrix_sdk::ruma::events::relation::{Replacement, Thread};
-use matrix_sdk::ruma::events::room::message::{Relation, RoomMessageEventContentWithoutRelation};
+use matrix_sdk::ruma::events::room::message::{
+    FormattedBody, ImageMessageEventContent, MessageType, Relation,
+    RoomMessageEventContentWithoutRelation,
+};
+use matrix_sdk::ruma::events::room::{ImageInfo, MediaSource};
 use matrix_sdk::ruma::{EventId, OwnedEventId};
 use mime::Mime;
 use moka::future::{Cache, CacheBuilder};
@@ -23,7 +33,8 @@ use crate::common::{MAX_RESPONSE_TEXT_CHARS, MAX_URL_COUNTS_PER_MESSAGE, SAFE_UR
 use crate::{config, html_escape, limit};
 
 pub struct Worker {
-    cache: Cache<Url, Option<OpenGraph>>,
+    cache_og: Cache<Url, Option<OpenGraph>>,
+    cache_img: Cache<Url, Option<ImagePreview>>,
     config: Arc<config::Config>,
     db: Pool,
     reqwest_client: reqwest::Client,
@@ -33,15 +44,25 @@ pub struct Worker {
 #[derive(Clone, Debug)]
 struct OpenGraph {
     pub description: String,
+    pub images: IndexSet<Url>,
     pub site_name: String,
     pub title: String,
     pub url: String,
 }
 
+#[derive(Clone)]
+struct ImagePreview {
+    pub media_source: MediaSource,
+    pub image_info: ImageInfo,
+}
+
 impl Worker {
     #[instrument(skip_all)]
     pub async fn new(config: Arc<config::Config>) -> Result<Arc<Worker>> {
-        let cache = CacheBuilder::new(config.cache_entries)
+        let cache_og = CacheBuilder::new(config.cache_entries)
+            .time_to_live(config.cache_duration)
+            .build();
+        let cache_img = CacheBuilder::new(config.cache_entries)
             .time_to_live(config.cache_duration)
             .build();
 
@@ -89,7 +110,8 @@ PRAGMA optimize;
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Arc::new(Worker {
-            cache,
+            cache_og,
+            cache_img,
             config,
             db,
             reqwest_client,
@@ -237,6 +259,7 @@ PRAGMA optimize;
     ) {
         let mut reply_text = String::new();
         let mut reply_html = String::new();
+        let mut reply_image = None;
 
         for mut url in urls.into_iter().take(MAX_URL_COUNTS_PER_MESSAGE) {
             info!("Fetching URL preview for: {}", url);
@@ -283,7 +306,7 @@ PRAGMA optimize;
             // };
 
             let Some(preview) = self
-                .cache
+                .cache_og
                 .get_with_by_ref(&url, self.clone().fetch_single_url_preview(url.clone()))
                 .await
             else {
@@ -342,6 +365,10 @@ PRAGMA optimize;
                 reply_html.push_str("</div>");
             }
             reply_html.push_str("</blockquote>");
+
+            reply_image = self
+                .create_image_preview(room.client(), preview.images)
+                .await;
             break;
         }
 
@@ -363,8 +390,19 @@ PRAGMA optimize;
         .add_mentions(Mentions::new())
         .with_relation(Some(Relation::Replacement(Replacement::new(
             response_id,
-            RoomMessageEventContentWithoutRelation::notice_html(reply_text, reply_html)
-                .add_mentions(Mentions::new()),
+            if let Some(reply_image) = reply_image {
+                RoomMessageEventContentWithoutRelation::new(MessageType::Image({
+                    let mut image =
+                        ImageMessageEventContent::new(reply_text, reply_image.media_source);
+                    image.formatted = Some(FormattedBody::html(reply_html));
+                    image.filename = Some("preview.webp".to_owned());
+                    image.info = Some(Box::new(reply_image.image_info));
+                    image
+                }))
+            } else {
+                RoomMessageEventContentWithoutRelation::notice_html(reply_text, reply_html)
+                    .add_mentions(Mentions::new())
+            },
         ))));
         if let Err(err) = room.send(reply).await {
             error!("Failed to send URL preview: {}", err);
@@ -385,6 +423,12 @@ PRAGMA optimize;
                 Selector::parse("meta[name=\"description\" i]").unwrap(),
             ]
         });
+        static META_OG_IMAGE: LazyLock<[Selector; 2]> = LazyLock::new(|| {
+            [
+                Selector::parse("meta[property=\"og:image\" i], meta[property=\"og:image:url\" i], meta[property=\"og:image:secure_url\" i]").unwrap(),
+                Selector::parse("meta[property=\"twitter:image\" i], meta[property=\"twitter:image:url\" i], meta[property=\"twitter:image:secure_url\" i]").unwrap(),
+            ]
+        });
         static META_OG_SITE_NAME: LazyLock<Selector> =
             LazyLock::new(|| Selector::parse("meta[property=\"og:site_name\" i]").unwrap());
         static META_OG_TITLE: LazyLock<[Selector; 2]> = LazyLock::new(|| {
@@ -401,8 +445,12 @@ PRAGMA optimize;
                 Selector::parse("h3").unwrap(),
             ]
         });
-        static META_OG_URL: LazyLock<Selector> =
-            LazyLock::new(|| Selector::parse("meta[property=\"og:url\" i]").unwrap());
+        static META_OG_URL: LazyLock<[Selector; 2]> = LazyLock::new(|| {
+            [
+                Selector::parse("meta[property=\"og:url\" i]").unwrap(),
+                Selector::parse("meta[property=\"twitter:url\" i]").unwrap(),
+            ]
+        });
         static META_OG_URL_FALLBACK: LazyLock<Selector> =
             LazyLock::new(|| Selector::parse("link[rel=\"canonical\" i]").unwrap());
 
@@ -484,6 +532,17 @@ PRAGMA optimize;
                 .next()
                 .unwrap_or_default()
                 .to_owned(),
+            images: META_OG_IMAGE
+                .iter()
+                .map(|selector| {
+                    dom.select(selector)
+                        .filter_map(|element| element.attr("content"))
+                        .filter_map(|content| Url::parse(content).ok())
+                        .collect::<IndexSet<_>>()
+                })
+                .filter(|images| !images.is_empty())
+                .next()
+                .unwrap_or_default(),
             site_name: dom
                 .select(&META_OG_SITE_NAME)
                 .filter_map(|element| element.attr("content"))
@@ -507,8 +566,9 @@ PRAGMA optimize;
                         .next()
                 })
                 .unwrap_or_default(),
-            url: dom
-                .select(&META_OG_URL)
+            url: META_OG_URL
+                .iter()
+                .flat_map(|selector| dom.select(selector))
                 .filter_map(|element| element.attr("content"))
                 .filter(|&content| !content.is_empty())
                 .next()
@@ -520,6 +580,214 @@ PRAGMA optimize;
                 })
                 .unwrap_or_default()
                 .to_owned(),
+        })
+    }
+
+    async fn create_image_preview(
+        self: Arc<Self>,
+        client: matrix_sdk::Client,
+        urls: IndexSet<Url>,
+    ) -> Option<ImagePreview> {
+        let url = urls
+            .into_iter()
+            .filter_map(|mut url| {
+                let mut url_str = Cow::from(url.as_str());
+                for (from, to) in self.rewrite_url.iter() {
+                    match from.replace_all(&url_str, to) {
+                        Cow::Borrowed(_) => (),
+                        Cow::Owned(result) => {
+                            debug!("URL rewrite: {url_str} => {from} => {result}");
+                            url_str = result.into()
+                        }
+                    }
+                }
+                if let Cow::Owned(url_str) = url_str {
+                    url = match Url::parse(&url_str) {
+                        Ok(url) => url,
+                        Err(err) => {
+                            error!("Failed to parse the URL after rewrite: {}", err);
+                            return None;
+                        }
+                    }
+                };
+                Some(url)
+            })
+            .next()?;
+
+        info!("Fetching image preview for: {}", url);
+        self.cache_img
+            .get_with_by_ref(
+                &url,
+                self.clone().fetch_single_image_preview(client, url.clone()),
+            )
+            .await
+    }
+
+    async fn fetch_single_image_preview(
+        self: Arc<Self>,
+        client: matrix_sdk::Client,
+        url: Url,
+    ) -> Option<ImagePreview> {
+        // Send out the request
+        let mut response = match self
+            .reqwest_client
+            .get(url.clone())
+            .timeout(self.config.crawler_timeout)
+            .send()
+            .await
+            .and_then(|response| response.error_for_status())
+        {
+            Ok(response) => response,
+            Err(err) => {
+                error!("Failed to fetch image preview for {}: {}", url, err);
+                return None;
+            }
+        };
+
+        // Download the response
+        let mut image = Vec::new();
+        while image.len() < self.config.crawler_max_size {
+            match response.chunk().await {
+                Ok(Some(chunk)) => image.extend(chunk),
+                Ok(None) => break,
+                Err(err) => {
+                    error!("Error reading the image from {}: {}", url, err);
+                    return None;
+                }
+            }
+        }
+        if image.len() > self.config.crawler_max_size {
+            error!("Image too large to download: {}", url);
+            return None;
+        }
+
+        let (webp_data, image_info) = tokio::task::spawn_blocking({
+            let url = url.clone();
+            move || {
+                // Decode the image
+                let mut reader = ImageReader::new(Cursor::new(&image))
+                    .with_guessed_format()
+                    .unwrap();
+                reader.limits({
+                    let mut limits = Limits::default();
+                    limits.max_alloc = Some(self.config.crawler_max_image_buffer_size);
+                    limits
+                });
+                let mut decoder = match reader.into_decoder() {
+                    Ok(decoder) => decoder,
+                    Err(err) => {
+                        error!("Failed to decode image {}: {}", url, err);
+                        return None;
+                    }
+                };
+                if decoder.total_bytes() > self.config.crawler_max_image_buffer_size {
+                    error!("Image too large to decode: {}", url);
+                    return None;
+                }
+                let orientation = decoder.orientation().ok();
+                let mut pixbuf = match DynamicImage::from_decoder(decoder) {
+                    Ok(pixbuf) => pixbuf,
+                    Err(err) => {
+                        error!("Failed to decode image {}: {}", url, err);
+                        return None;
+                    }
+                };
+
+                // Transform the image
+                if let Some(orientation) = orientation {
+                    pixbuf.apply_orientation(orientation);
+                }
+                let has_alpha = pixbuf.has_alpha();
+                if pixbuf.width() > self.config.preview_image_max_width
+                    || pixbuf.height() > self.config.preview_image_max_height
+                {
+                    // As of image-0.25.10, the implementation isn't really aware of color spaces.
+                    match pixbuf.convert_color_space(
+                        Cicp::SRGB_LINEAR,
+                        Default::default(),
+                        if has_alpha {
+                            ColorType::Rgba32F
+                        } else {
+                            ColorType::Rgb32F
+                        },
+                    ) {
+                        Ok(()) => {}
+                        Err(err) => {
+                            error!("Failed to convert image color space: {}", err);
+                            return None;
+                        }
+                    };
+                    pixbuf = pixbuf.resize(
+                        self.config.preview_image_max_width,
+                        self.config.preview_image_max_height,
+                        FilterType::Triangle,
+                    );
+                }
+                match pixbuf.convert_color_space(
+                    Cicp::SRGB,
+                    Default::default(),
+                    if has_alpha {
+                        ColorType::Rgba8
+                    } else {
+                        ColorType::Rgb8
+                    },
+                ) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        error!("Failed to convert image color space: {}", err);
+                        return None;
+                    }
+                };
+
+                // Encode the image
+                let encoder = match webp::Encoder::from_image(&pixbuf) {
+                    Ok(encoder) => encoder,
+                    Err(err) => {
+                        error!("Failed to encode image {}: {}", url, err);
+                        return None;
+                    }
+                };
+                let webp_data =
+                    match encoder.encode_simple(false, self.config.preview_image_webp_quality) {
+                        Ok(webp_data) => webp_data,
+                        Err(err) => {
+                            error!("Failed to encode image {}: {:?}", url, err);
+                            return None;
+                        }
+                    };
+                if webp_data.len() == 0 {
+                    error!("Encoded image is empty: {}", url);
+                    return None;
+                }
+
+                let mut image_info = ImageInfo::new();
+                image_info.height = Some(pixbuf.height().into());
+                image_info.width = Some(pixbuf.width().into());
+                image_info.mimetype = Some("image/webp".to_owned());
+                image_info.size = webp_data.len().try_into().ok();
+                image_info.is_animated = Some(false);
+
+                Some((webp_data.to_vec(), image_info))
+            }
+        })
+        .await
+        .unwrap()?;
+
+        info!("Uploading image preview for: {}", url);
+        let media_source = match client
+            .upload_encrypted_file(&mut Cursor::new(webp_data))
+            .await
+        {
+            Ok(file) => MediaSource::Encrypted(Box::new(file)),
+            Err(err) => {
+                error!("Failed to upload image preview: {}", err);
+                return None;
+            }
+        };
+
+        Some(ImagePreview {
+            media_source,
+            image_info,
         })
     }
 

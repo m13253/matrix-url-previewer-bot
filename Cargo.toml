@@ -9,6 +9,7 @@ color-eyre = "0.6.5"
 deadpool-sqlite = { version = "*", features = ["tracing"] }
 encoding_rs = "0.8.35"
 eyre = "0.6.12"
+image = "0.25.10"
 indexmap = "2.14.0"
 matrix-sdk = { version = "0.18.0", features = ["eyre", "socks"] }
 matrixbot-ezlogin = "0.4.0"
@@ -28,6 +29,7 @@ tracing = "0.1.44"
 tracing-error = "0.2.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 url = "2.5.8"
+webp = "0.3.1"
 
 [features]
 bundled-sqlite = ["matrix-sdk/bundled-sqlite", "matrixbot-ezlogin/bundled-sqlite"]

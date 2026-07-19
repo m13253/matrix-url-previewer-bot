@@ -27,12 +27,24 @@ pub struct Config {
     #[serde(default)]
     pub crawler_max_size: usize,
 
+    #[serde(default)]
+    pub crawler_max_image_buffer_size: u64,
+
     #[serde_as(as = "DurationSeconds<f64>")]
     #[serde(default)]
     pub crawler_timeout: Duration,
 
     #[serde(default)]
     pub crawler_user_agent: String,
+
+    #[serde(default)]
+    pub preview_image_max_width: u32,
+
+    #[serde(default)]
+    pub preview_image_max_height: u32,
+
+    #[serde(default = "Config::default_preview_image_webp_quality")]
+    pub preview_image_webp_quality: f32,
 
     #[serde(default)]
     pub rewrite_url: Vec<[String; 2]>,
@@ -54,6 +66,9 @@ impl Config {
         if config.crawler_max_size == 0 {
             config.crawler_max_size = 10 * 1048576;
         }
+        if config.crawler_max_image_buffer_size == 0 {
+            config.crawler_max_image_buffer_size = 512 * 1048576;
+        }
         if config.crawler_timeout.is_zero() {
             config.crawler_timeout = Duration::from_secs(30);
         }
@@ -61,6 +76,19 @@ impl Config {
             config.crawler_user_agent =
                 "Mozilla/5.0 (compatible; Matrix-URL-Previewer-Bot; +https://github.com/m13253/matrix-url-previewer-bot; like Discordbot, TelegramBot, Twitterbot)".to_owned();
         }
+        if config.preview_image_max_width == 0 {
+            config.preview_image_max_width = 480
+        }
+        if config.preview_image_max_height == 0 {
+            config.preview_image_max_height = 200;
+        }
+        if config.preview_image_webp_quality < 0.0 || config.preview_image_webp_quality > 100.0 {
+            config.preview_image_webp_quality = Self::default_preview_image_webp_quality();
+        }
         Ok(Arc::new(config))
+    }
+
+    const fn default_preview_image_webp_quality() -> f32 {
+        75.0
     }
 }
