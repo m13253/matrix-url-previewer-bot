@@ -4,27 +4,27 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 color-eyre = "0.6.5"
 deadpool-sqlite = { version = "*", features = ["tracing"] }
-encoding_rs = "0.8.35"
-eyre = "0.6.12"
+encoding_rs = "0.8.42"
+eyre = "0.6.14"
 image = "0.25.10"
-indexmap = "2.14.0"
-matrix-sdk = { version = "0.18.0", features = ["eyre", "socks"] }
-matrixbot-ezlogin = "0.4.0"
+indexmap = "2.14.2"
+matrix-sdk = { version = "0.19.1", features = ["eyre", "socks"] }
+matrixbot-ezlogin = "0.4.1"
 mime = "0.3.17"
-moka = { version = "0.12.15", features = ["future"] }
+moka = { version = "0.12.16", features = ["future"] }
 nom = "8.0.0"
-regex = "1.13.0"
-reqwest = { version = "0.13.4", features = ["brotli", "charset", "deflate", "gzip", "http2", "socks", "stream", "system-proxy", "zstd"] }
+regex = "1.13.1"
+reqwest = { version = "0.13.5", features = ["brotli", "charset", "deflate", "gzip", "http2", "socks", "stream", "system-proxy", "zstd"] }
 scraper = "0.27.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-serde_with = "3.21.0"
-stacksafe = "1.0.2"
-tokio = { version = "1.52.3", features = ["full"] }
-toml = "1.1.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+serde_with = "3.24.0"
+stacksafe = "1.0.3"
+tokio = { version = "1.53.2", features = ["full"] }
+toml = "1.1.6"
 tracing = "0.1.44"
 tracing-error = "0.2.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
