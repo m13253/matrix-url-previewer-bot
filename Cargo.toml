@@ -7,10 +7,10 @@ edition = "2024"
 clap = { version = "4.6.7", features = ["derive"] }
 color-eyre = "0.6.5"
 deadpool-sqlite = { version = "*", features = ["tracing"] }
-encoding_rs = "0.8.41"
+encoding_rs = "0.8.42"
 eyre = "0.6.14"
 indexmap = "2.14.2"
-matrix-sdk = { version = "0.19.0", features = ["eyre", "socks"] }
+matrix-sdk = { version = "0.19.1", features = ["eyre", "socks"] }
 matrixbot-ezlogin = "0.4.1"
 mime = "0.3.17"
 moka = { version = "0.12.16", features = ["future"] }
@@ -20,9 +20,9 @@ reqwest = { version = "0.13.5", features = ["brotli", "charset", "deflate", "gzi
 scraper = "0.27.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-serde_with = "3.23.0"
+serde_with = "3.24.0"
 stacksafe = "1.0.3"
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.53.2", features = ["full"] }
 toml = "1.1.6"
 tracing = "0.1.44"
 tracing-error = "0.2.1"
