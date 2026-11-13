@@ -14,7 +14,7 @@ use matrix_sdk::ruma::events::room::message::{Relation, RoomMessageEventContentW
 use matrix_sdk::ruma::{EventId, OwnedEventId};
 use mime::Mime;
 use moka::future::{Cache, CacheBuilder};
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use scraper::{Html, Selector};
 use tracing::{Instrument, debug, error, info, instrument, warn};
 use url::Url;
@@ -524,11 +524,21 @@ PRAGMA optimize;
     }
 
     fn collapse_whitespace(s: &str) -> String {
+        // OpenGraph specification says strings have no escape characters,
+        // but some websites, for example, Twitter, uses <br> for line breaks.
+        // We add a special rule to recognize <br>.
+        static BR_TAG: LazyLock<Regex> = LazyLock::new(|| {
+            RegexBuilder::new("<[\t\n\x0c\r ]*br[\t\n\x0c\r /]*>")
+                .case_insensitive(true)
+                .build()
+                .unwrap()
+        });
+        // Element's built-in URL previewer joins line breaks, so we do the same thing.
         // https://developer.mozilla.org/en-US/docs/Glossary/Whitespace
         static CONSECUTIVE_WHITESPACES: LazyLock<Regex> =
             LazyLock::new(|| Regex::new("[\t\n\x0c\r ]+").unwrap());
         CONSECUTIVE_WHITESPACES
-            .replace_all(s, " ")
+            .replace_all(&BR_TAG.replace_all(s, "\n"), " ")
             .trim()
             .to_owned()
     }
