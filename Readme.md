@@ -2,7 +2,17 @@
 
 A Matrix bot that serves URL previews from a trusted server to the whole room.
 
-## To website owners
+## Benefits of using Matrix-URL-Previewer-Bot over Synapse’s built-in URL previewer
+
+1. Supporting encrypted chatrooms without leaking information to untrusted homeservers.
+
+   We expect Matrix-URL-Previewer-Bot be operated by chatroom admins. They are considered more trusted, than the participating homeservers, from a room member’s perspective.
+
+2. Ensuring all members of a chatroom, no matter which homeserver they belong to, see the same URL preview.
+
+3. Supporting custom rewrite rules to deal with tricky websites.
+
+## ⚠️ To website owners: If you see Matrix-URL-Previewer-Bot crawling your site
 
 [Matrix](https://matrix.org) is a protocol to build messaging apps, for example, [Element and FluffyChat](https://matrix.org/ecosystem/clients/), similar to Discord and WhatsApp.
 
@@ -21,16 +31,6 @@ Due to the distributed nature of Matrix, HTTP requests using our User-Agent may 
 2. You may impose **rate-limiting**, because a well-behaved Matrix-URL-Previewer-Bot caches the result for 1 hour by default.
 
 3. You may prevent malicious crawlers by serving only the **page title** and the **[Open Graph metadata](https://ogp.me)**, omitting the page body, because Matrix-URL-Previewer-Bot doesn’t need the page body.
-
-## Benefits of using Matrix-URL-Previewer-Bot over Synapse’s built-in URL previewer
-
-1. Supporting encrypted chatrooms without leaking information to untrusted homeservers.
-
-   We expect Matrix-URL-Previewer-Bot be operated by chatroom admins. They are considered more trusted, than the participating homeservers, from a room member’s perspective.
-
-2. Ensuring all members of a chatroom, no matter which homeserver they belong to, see the same URL preview.
-
-3. Supporting custom rewrite rules to deal with tricky websites.
 
 ## How to run your own Matrix-URL-Previewer-Bot
 
